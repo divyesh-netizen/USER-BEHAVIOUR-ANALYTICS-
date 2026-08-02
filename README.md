@@ -70,7 +70,9 @@ We use **Isolation Forest** to detect anomalies.
 ---
 
 ## ▶️ Run the Project
+## 📸 Sample Output
 
+Graph showing anomaly detection based on user behavior patterns.
 ```bash
 pip install -r requirements.txt
 python src/uba_model.py
