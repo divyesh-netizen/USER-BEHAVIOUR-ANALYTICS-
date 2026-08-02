@@ -1,0 +1,98 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import IsolationForest
+
+# ----------------------------
+# Load Dataset
+# ----------------------------
+df = pd.read_csv('../data/client_hostname.csv')
+df = df.dropna()
+
+# ----------------------------
+# Simulate Real Behavior
+# ----------------------------
+df = pd.concat([df]*10, ignore_index=True)
+df = df.sample(frac=1).reset_index(drop=True)
+
+df['user_id'] = df['client']
+
+# ----------------------------
+# Add Timestamp
+# ----------------------------
+df['timestamp'] = pd.date_range(start='2024-01-01', periods=len(df), freq='S')
+
+# ----------------------------
+# Feature Engineering
+# ----------------------------
+df['activity'] = 1
+
+df = df.sort_values(['user_id', 'timestamp'])
+
+df['time_diff'] = df.groupby('user_id')['timestamp'].diff().dt.seconds
+
+# ----------------------------
+# Add Simulated Attackers
+# ----------------------------
+df.loc[:200, 'user_id'] = 'ATTACKER_1'
+df.loc[200:400, 'user_id'] = 'ATTACKER_2'
+df.loc[400:600, 'user_id'] = 'ATTACKER_3'
+
+# ----------------------------
+# Aggregate User Behavior
+# ----------------------------
+user_behavior = df.groupby('user_id').agg({
+    'activity': 'sum',
+    'hostname': 'nunique',
+    'time_diff': ['mean', 'std']
+}).reset_index()
+
+user_behavior.columns = [
+    'user_id',
+    'total_activity',
+    'unique_sites',
+    'avg_time_gap',
+    'std_time_gap'
+]
+
+# Fill NaN
+user_behavior = user_behavior.fillna(0)
+
+# ----------------------------
+# ML Model
+# ----------------------------
+X = user_behavior.drop(columns=['user_id'])
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+model = IsolationForest(contamination=0.1, random_state=42)
+user_behavior['anomaly'] = model.fit_predict(X_scaled)
+
+# ----------------------------
+# Show Anomalies
+# ----------------------------
+anomalies = user_behavior[user_behavior['anomaly'] == -1]
+
+print("\n🚨 Suspicious Users:\n")
+print(anomalies)
+
+# ----------------------------
+# Visualization
+# ----------------------------
+plt.figure()
+
+plt.scatter(user_behavior['unique_sites'],
+            user_behavior['avg_time_gap'],
+            c=user_behavior['anomaly'])
+
+plt.xscale('log')
+plt.yscale('log')
+
+plt.xlabel("Unique Sites (log)")
+plt.ylabel("Avg Time Gap (log)")
+plt.title("User Behavior Analysis")
+
+plt.show()
